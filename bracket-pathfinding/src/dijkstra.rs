@@ -115,48 +115,23 @@ impl DijkstraMap {
     /// If you provide more starting points than you have CPUs, automatically branches to a parallel
     /// version.
     pub fn build(dm: &mut DijkstraMap, starts: &[usize], map: &dyn BaseMap) {
-        DijkstraMap::build_helper(dm, starts, map);
+        // DijkstraMap::build_helper(dm, starts, map);
         let mapsize: usize = (dm.size_x * dm.size_y) as usize;
         let mut open_list: Vec<(usize, f32)> = Vec::with_capacity(mapsize * 2);
-        let mut closed_list: Vec<bool> = vec![false; mapsize];
 
         for start in starts {
-            // Clearing vec in debug mode is stupidly slow, so we do it the hard way!
-            unsafe {
-                open_list.set_len(0);
-            }
-            // Zeroing the buffer is far too slow, so we're doing it the C way
-            unsafe {
-                std::ptr::write_bytes(
-                    closed_list.as_mut_ptr(),
-                    0,
-                    closed_list.len() * mem::size_of::<bool>(),
-                );
-            }
+            open_list.clear();
             open_list.push((*start, 0.0));
 
-            while !open_list.is_empty() {
-                let last_idx = open_list.len() - 1;
-                let current_tile = open_list[last_idx];
-                let tile_idx = current_tile.0;
-                let depth = current_tile.1;
-                unsafe {
-                    open_list.set_len(last_idx);
-                }
-
-                if dm.map[tile_idx as usize] > depth {
-                    dm.map[tile_idx as usize] = depth;
-
-                    let exits = map.get_available_exits(tile_idx);
-                    for exit in exits {
-                        DijkstraMap::add_if_open(
-                            dm.max_depth,
-                            exit.0,
-                            &mut open_list,
-                            &mut closed_list,
-                            depth + 1.0,
-                        );
-                    }
+            while let Some((tile_idx, depth)) = open_list.pop() {
+                let exits = map.get_available_exits(tile_idx);
+                for (new_idx, add_depth) in exits {
+                    let new_depth = depth + add_depth;
+                    let prev_depth = dm.map[new_idx];
+                    if new_depth >= prev_depth { continue; }
+                    if new_depth >= dm.max_depth { continue; }
+                    dm.map[new_idx] = new_depth;
+                    open_list.push((new_idx, new_depth));
                 }
             }
         }
@@ -165,6 +140,7 @@ impl DijkstraMap {
     /// Implementation of Parallel Dijkstra.
     #[cfg(feature = "threaded")]
     fn build_parallel(dm: &mut DijkstraMap, starts: &[usize], map: &dyn BaseMap) {
+        panic!("should not run parallel");
         let mapsize: usize = (dm.size_x * dm.size_y) as usize;
         let mut layers: Vec<ParallelDm> = Vec::with_capacity(starts.len());
         for start_chunk in starts.chunks(rayon::current_num_threads()) {
