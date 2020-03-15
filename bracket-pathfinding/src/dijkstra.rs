@@ -1,6 +1,7 @@
 use bracket_algorithm_traits::prelude::BaseMap;
 #[cfg(feature = "threaded")]
 use rayon::prelude::*;
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::f32::MAX;
 use std::mem;
@@ -112,18 +113,20 @@ impl DijkstraMap {
     /// Builds the Dijkstra map: iterate from each starting point, to each exit provided by BaseMap's
     /// exits implementation. Each step adds cost to the current depth, and is discarded if the new
     /// depth is further than the current depth.
+    /// WARNING: Will give incorrect results when used with non-uniform exit costs. Much slower
+    /// algorithm required to support that.
     /// If you provide more starting points than you have CPUs, automatically branches to a parallel
     /// version.
     pub fn build(dm: &mut DijkstraMap, starts: &[usize], map: &dyn BaseMap) {
         // DijkstraMap::build_helper(dm, starts, map);
         let mapsize: usize = (dm.size_x * dm.size_y) as usize;
-        let mut open_list: Vec<(usize, f32)> = Vec::with_capacity(mapsize * 2);
+        let mut open_list: VecDeque<(usize, f32)> = VecDeque::with_capacity(mapsize);
 
         for start in starts {
             open_list.clear();
-            open_list.push((*start, 0.0));
+            open_list.push_back((*start, 0.0));
 
-            while let Some((tile_idx, depth)) = open_list.pop() {
+            while let Some((tile_idx, depth)) = open_list.pop_front() {
                 let exits = map.get_available_exits(tile_idx);
                 for (new_idx, add_depth) in exits {
                     let new_depth = depth + add_depth;
@@ -131,7 +134,7 @@ impl DijkstraMap {
                     if new_depth >= prev_depth { continue; }
                     if new_depth >= dm.max_depth { continue; }
                     dm.map[new_idx] = new_depth;
-                    open_list.push((new_idx, new_depth));
+                    open_list.push_back((new_idx, new_depth));
                 }
             }
         }
